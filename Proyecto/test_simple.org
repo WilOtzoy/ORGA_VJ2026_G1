@@ -1,0 +1,24 @@
+// Archivo de prueba para Casa Inteligente
+conf_ini
+
+modo_fiesta
+Ventilador: OFF
+LED'S: Alternandose
+
+modo_relajado
+Ventilador: OFF
+LED'S: OFF
+
+modo_noche
+Ventilador: OFF
+LED'S: OFF
+
+encender_todo
+Ventilador: OFF
+LED'S: ON
+
+apagar_todo
+Ventilador: OFF
+LED'S: OFF
+
+conf:fin
