@@ -1,5 +1,10 @@
 #include <EEPROM.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 
+// ============================================================
+// PINES - LEDs DE AMBIENTES
+// ============================================================
 #define SALA_L1     2
 #define SALA_L2     3
 #define SALA_L3     4
@@ -20,10 +25,16 @@
 #define HAB_L2      26
 #define HAB_L3      27
 
+// ============================================================
+// PINES - LEDs DE ESTADO
+// ============================================================
 #define LED_AZUL    28
 #define LED_VERDE   29
 #define LED_ROJO    30
 
+// ============================================================
+// ARRAY DE LEDS DE AMBIENTES
+// ============================================================
 const int LEDS_AMBIENTES[] = {
   SALA_L1, SALA_L2, SALA_L3,
   COMEDOR_L1, COMEDOR_L2, COMEDOR_L3,
@@ -33,6 +44,9 @@ const int LEDS_AMBIENTES[] = {
 };
 const int TOTAL_LEDS = 15;
 
+// ============================================================
+// EEPROM
+// ============================================================
 #define EEPROM_MODO_ACTUAL  50
 
 #define MODO_NINGUNO        0
@@ -42,6 +56,15 @@ const int TOTAL_LEDS = 15;
 #define MODO_ENCENDER_TODO  4
 #define MODO_APAGAR_TODO    5
 
+// ============================================================
+// LCD I2C
+// Si no funciona con 0x27, prueba 0x3F
+// ============================================================
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// ============================================================
+// VARIABLES GLOBALES
+// ============================================================
 int modoActual = MODO_NINGUNO;
 bool cargandoArchivo = false;
 String lineaSerial = "";
@@ -51,15 +74,20 @@ unsigned long tiempoAnteriorFiesta = 0;
 bool estadoFiesta = false;
 const long INTERVALO_FIESTA = 300;
 
+// ============================================================
+// SETUP
+// ============================================================
 void setup() {
   Serial.begin(9600);
   Serial1.begin(9600);
 
+  // LEDs de ambientes
   for (int i = 0; i < TOTAL_LEDS; i++) {
     pinMode(LEDS_AMBIENTES[i], OUTPUT);
     digitalWrite(LEDS_AMBIENTES[i], LOW);
   }
 
+  // LEDs de estado
   pinMode(LED_AZUL, OUTPUT);
   pinMode(LED_VERDE, OUTPUT);
   pinMode(LED_ROJO, OUTPUT);
@@ -68,6 +96,17 @@ void setup() {
   digitalWrite(LED_VERDE, LOW);
   digitalWrite(LED_ROJO, LOW);
 
+  // LCD
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Casa Inteligente");
+  lcd.setCursor(0, 1);
+  lcd.print("Solo LEDs");
+  delay(1500);
+
+  // Recuperar ultimo modo guardado
   modoActual = EEPROM.read(EEPROM_MODO_ACTUAL);
   if (modoActual < MODO_NINGUNO || modoActual > MODO_APAGAR_TODO) {
     modoActual = MODO_NINGUNO;
@@ -75,12 +114,17 @@ void setup() {
 
   if (modoActual != MODO_NINGUNO) {
     aplicarModo(modoActual);
+  } else {
+    mostrarLCDSistemaListo();
   }
 
   digitalWrite(LED_AZUL, HIGH);
   Serial.println("Sistema listo. Esperando comandos.");
 }
 
+// ============================================================
+// LOOP
+// ============================================================
 void loop() {
   leerSerialUSB();
   leerBluetooth();
@@ -90,15 +134,20 @@ void loop() {
   }
 }
 
+// ============================================================
+// LEER SERIAL USB
+// ============================================================
 void leerSerialUSB() {
   while (Serial.available() > 0) {
     char c = Serial.read();
 
     if (c == '\n') {
       lineaSerial.trim();
+
       if (lineaSerial.length() > 0) {
         procesarLineaOrg(lineaSerial);
       }
+
       lineaSerial = "";
     } else {
       lineaSerial += c;
@@ -106,6 +155,9 @@ void leerSerialUSB() {
   }
 }
 
+// ============================================================
+// LEER BLUETOOTH
+// ============================================================
 void leerBluetooth() {
   if (cargandoArchivo) return;
 
@@ -114,9 +166,11 @@ void leerBluetooth() {
 
     if (c == '\n') {
       lineaBluetooth.trim();
+
       if (lineaBluetooth.length() > 0) {
         procesarComandoBluetooth(lineaBluetooth);
       }
+
       lineaBluetooth = "";
     } else {
       lineaBluetooth += c;
@@ -124,38 +178,63 @@ void leerBluetooth() {
   }
 }
 
+// ============================================================
+// PROCESAR LINEA DEL .ORG
+// ============================================================
 void procesarLineaOrg(String linea) {
+  // Ignorar comentarios
   if (linea.startsWith("//")) return;
+
+  // Ignorar linea vacia
   if (linea.length() == 0) return;
 
+  // Quitar comentario al final de la linea
   int posComentario = linea.indexOf("//");
   if (posComentario > 0) {
     linea = linea.substring(0, posComentario);
     linea.trim();
   }
 
+  // Inicio de configuracion
   if (linea == "conf_ini") {
     cargandoArchivo = true;
     Serial.println("OK: Inicio de archivo detectado.");
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Cargando .org...");
+    lcd.setCursor(0, 1);
+    lcd.print("Espere...");
     return;
   }
 
+  // Fin de configuracion
   if (linea == "conf:fin") {
     if (!cargandoArchivo) {
-      mostrarError();
-      Serial.println("ERROR: Sin conf_ini");
+      mostrarError("Sin conf_ini");
       return;
     }
 
     cargandoArchivo = false;
     parpadearVerde();
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Configuracion");
+    lcd.setCursor(0, 1);
+    lcd.print("guardada");
+
     Serial.println("OK: Configuracion guardada.");
+    delay(1200);
+
     aplicarModo(modoActual);
     return;
   }
 
+  // Si no se ha iniciado carga, ignorar
   if (!cargandoArchivo) return;
 
+  // Modos validos
   if (linea == "modo_fiesta") {
     modoActual = MODO_FIESTA;
     EEPROM.write(EEPROM_MODO_ACTUAL, MODO_FIESTA);
@@ -191,15 +270,23 @@ void procesarLineaOrg(String linea) {
     return;
   }
 
+  // Lineas informativas permitidas
   if (linea.startsWith("LED'S:")) return;
   if (linea.startsWith("Mensaje en LCD:")) return;
 
-  mostrarError();
+  // Si no coincide con nada, error
+  mostrarError("Linea invalida");
   Serial.print("ERROR: linea no reconocida: ");
   Serial.println(linea);
 }
 
+// ============================================================
+// PROCESAR COMANDO BLUETOOTH
+// ============================================================
 void procesarComandoBluetooth(String cmd) {
+  Serial.print("Bluetooth recibio: ");
+  Serial.println(cmd);
+
   if (cmd == "modo_fiesta") {
     modoActual = MODO_FIESTA;
     EEPROM.write(EEPROM_MODO_ACTUAL, MODO_FIESTA);
@@ -237,41 +324,94 @@ void procesarComandoBluetooth(String cmd) {
 
   } else if (cmd == "estado") {
     String respuesta = "Modo actual: ";
+
     switch (modoActual) {
-      case MODO_FIESTA: respuesta += "FIESTA"; break;
-      case MODO_RELAJADO: respuesta += "RELAJADO"; break;
-      case MODO_NOCHE: respuesta += "NOCHE"; break;
+      case MODO_FIESTA:        respuesta += "FIESTA"; break;
+      case MODO_RELAJADO:      respuesta += "RELAJADO"; break;
+      case MODO_NOCHE:         respuesta += "NOCHE"; break;
       case MODO_ENCENDER_TODO: respuesta += "ENCENDER_TODO"; break;
-      case MODO_APAGAR_TODO: respuesta += "APAGAR_TODO"; break;
-      default: respuesta += "NINGUNO"; break;
+      case MODO_APAGAR_TODO:   respuesta += "APAGAR_TODO"; break;
+      default:                 respuesta += "NINGUNO"; break;
     }
+
     Serial1.println(respuesta);
 
   } else {
     Serial1.println("ERROR: Modo invalido");
-    mostrarError();
+    mostrarError("Modo invalido");
+    aplicarModo(modoActual);
   }
 }
 
+// ============================================================
+// APLICAR MODO
+// ============================================================
 void aplicarModo(int modo) {
   switch (modo) {
     case MODO_FIESTA:
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Modo: FIESTA");
+      lcd.setCursor(0, 1);
+      lcd.print("Alternando");
       break;
+
     case MODO_RELAJADO:
       apagarTodosLEDs();
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Modo: RELAJADO");
+      lcd.setCursor(0, 1);
+      lcd.print("LEDs OFF");
       break;
+
     case MODO_NOCHE:
       apagarTodosLEDs();
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Modo: NOCHE");
+      lcd.setCursor(0, 1);
+      lcd.print("LEDs OFF");
       break;
+
     case MODO_ENCENDER_TODO:
       encenderTodosLEDs();
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("LEDs ON");
+      lcd.setCursor(0, 1);
+      lcd.print("Todo encendido");
       break;
+
     case MODO_APAGAR_TODO:
       apagarTodosLEDs();
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("LEDs OFF");
+      lcd.setCursor(0, 1);
+      lcd.print("Todo apagado");
+      break;
+
+    default:
+      mostrarLCDSistemaListo();
       break;
   }
 }
 
+// ============================================================
+// LCD EN ESPERA
+// ============================================================
+void mostrarLCDSistemaListo() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Sistema listo");
+  lcd.setCursor(0, 1);
+  lcd.print("Esperando cmd");
+}
+
+// ============================================================
+// ACTUALIZAR MODO FIESTA
+// ============================================================
 void actualizarFiesta() {
   unsigned long tiempoActual = millis();
 
@@ -279,6 +419,7 @@ void actualizarFiesta() {
     tiempoAnteriorFiesta = tiempoActual;
     estadoFiesta = !estadoFiesta;
 
+    // Grupo A: sala, cocina, habitacion
     digitalWrite(SALA_L1,   estadoFiesta ? HIGH : LOW);
     digitalWrite(SALA_L2,   estadoFiesta ? HIGH : LOW);
     digitalWrite(SALA_L3,   estadoFiesta ? HIGH : LOW);
@@ -291,6 +432,7 @@ void actualizarFiesta() {
     digitalWrite(HAB_L2,    estadoFiesta ? HIGH : LOW);
     digitalWrite(HAB_L3,    estadoFiesta ? HIGH : LOW);
 
+    // Grupo B: comedor y baño
     digitalWrite(COMEDOR_L1, estadoFiesta ? LOW : HIGH);
     digitalWrite(COMEDOR_L2, estadoFiesta ? LOW : HIGH);
     digitalWrite(COMEDOR_L3, estadoFiesta ? LOW : HIGH);
@@ -301,6 +443,9 @@ void actualizarFiesta() {
   }
 }
 
+// ============================================================
+// UTILIDADES LEDs
+// ============================================================
 void encenderTodosLEDs() {
   for (int i = 0; i < TOTAL_LEDS; i++) {
     digitalWrite(LEDS_AMBIENTES[i], HIGH);
@@ -315,22 +460,43 @@ void apagarTodosLEDs() {
 
 void parpadearVerde() {
   digitalWrite(LED_AZUL, LOW);
+
   for (int i = 0; i < 3; i++) {
     digitalWrite(LED_VERDE, HIGH);
     delay(200);
     digitalWrite(LED_VERDE, LOW);
     delay(200);
   }
+
   digitalWrite(LED_AZUL, HIGH);
 }
 
-void mostrarError() {
+// ============================================================
+// MOSTRAR ERROR
+// ============================================================
+void mostrarError(String mensaje) {
+  cargandoArchivo = false;
   digitalWrite(LED_AZUL, LOW);
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("ERROR:");
+  lcd.setCursor(0, 1);
+
+  if (mensaje.length() > 16) {
+    mensaje = mensaje.substring(0, 16);
+  }
+  lcd.print(mensaje);
+
+  Serial.print("ERROR: ");
+  Serial.println(mensaje);
+
   for (int i = 0; i < 4; i++) {
     digitalWrite(LED_ROJO, HIGH);
     delay(200);
     digitalWrite(LED_ROJO, LOW);
     delay(200);
   }
+
   digitalWrite(LED_AZUL, HIGH);
 }
