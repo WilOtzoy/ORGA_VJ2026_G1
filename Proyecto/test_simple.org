@@ -1,3 +1,19 @@
+// Configuracion solo LEDs
 conf_ini
+
+modo_fiesta
+LED'S: Alternandose
+
+modo_relajado
+LED'S: OFF
+
+modo_noche
+LED'S: OFF
+
 encender_todo
+LED'S: ON
+
+apagar_todo
+LED'S: OFF
+
 conf:fin

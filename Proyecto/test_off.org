@@ -1,0 +1,3 @@
+conf_ini
+apagar_todo
+conf:fin
