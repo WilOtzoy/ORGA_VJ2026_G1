@@ -32,6 +32,10 @@
 #define LED_VERDE   29
 #define LED_ROJO    30
 
+//====================
+// PIN PARA EL MOTOR 
+#define MOTOR_DC 31
+
 // ============================================================
 // ARRAY DE LEDS DE AMBIENTES
 // ============================================================
@@ -112,7 +116,9 @@ void setup() {
   pinMode(LED_AZUL, OUTPUT);
   pinMode(LED_VERDE, OUTPUT);
   pinMode(LED_ROJO, OUTPUT);
-
+  // MOTOR DC
+  pinMode(MOTOR_DC, OUTPUT);
+  digitalWrite(MOTOR_DC, LOW);
   digitalWrite(LED_AZUL, LOW);
   digitalWrite(LED_VERDE, LOW);
   digitalWrite(LED_ROJO, LOW);
@@ -120,7 +126,7 @@ void setup() {
   // LCD
   lcd.init();
   lcd.backlight();
-  lcdMostrar("Casa Inteligente", "Solo LEDs");
+  lcdMostrar("Casa Inteligente", "G1");
   delay(1500);
 
   // Recuperar ultimo modo guardado
@@ -170,6 +176,16 @@ void leerSerialUSB() {
       lineaSerial += c;
     }
   }
+}
+
+// ENDCENDER O APAGAR MOTOR DC
+
+void encenderMotor(){
+  digitalWrite(MOTOR_DC, HIGH);
+}
+
+void apagarMotor(){
+  digitalWrite(MOTOR_DC, LOW);
 }
 
 // ============================================================
@@ -345,30 +361,36 @@ void procesarComandoBluetooth(String cmd) {
 void aplicarModo(int modo) {
   switch (modo) {
     case MODO_FIESTA:
-      lcdMostrar("Modo: FIESTA", "Alternando");
+      encenderMotor();
+      lcdMostrar("Modo: FIESTA", "Vent: ON");
       break;
 
     case MODO_RELAJADO:
       apagarTodosLEDs();
-      lcdMostrar("Modo: RELAJADO", "LEDS OFF");
+      apagarMotor();
+      lcdMostrar("Modo: RELAJAD", "Vent: OFF");
       break;
 
     case MODO_NOCHE:
       apagarTodosLEDs();
-      lcdMostrar("Modo: NOCHE", "LEDS OFF");
+      apagarMotor();
+      lcdMostrar("Modo: NOCHE", "Vent: OFF");
       break;
 
     case MODO_ENCENDER_TODO:
       encenderTodosLEDs();
-      lcdMostrar("LEDS ON", "Todo encendido");
+      encenderMotor();
+      lcdMostrar("LEDS ON", "Vent: ON");
       break;
 
     case MODO_APAGAR_TODO:
       apagarTodosLEDs();
-      lcdMostrar("LEDS OFF", "Todo apagado");
+      apagarMotor();
+      lcdMostrar("LEDS OFF", "Vent: OFF");
       break;
 
     default:
+      apagarMotor();
       lcdMostrar("Sistema listo", "Esperando cmd");
       break;
   }
