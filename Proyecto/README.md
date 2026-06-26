@@ -75,6 +75,11 @@ El sistema se divide en los siguientes módulos:
 
 ---
 
+## Diagrama De Proteus
+![Diagrama Proteus](diagrama.jpeg "Diagrama Proteus") 
+
+---
+
 ## Componentes utilizados
 
 - Arduino Mega 2560
